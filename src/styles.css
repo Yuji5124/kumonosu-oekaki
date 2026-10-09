@@ -1,4 +1,12 @@
 :root { font-family: 'Trebuchet MS', 'Hiragino Maru Gothic ProN', sans-serif; color: #fffaf0; background: #153b45; font-synthesis: none; }
+#debug-panel { width: min(340px, 42vw) !important; max-height: 75vh; overflow: auto; font-size: 14px !important; }
+#debug-panel summary { cursor: pointer; min-height: 44px; padding: 8px; }
+#debug-panel dd { white-space: pre-line; overflow-wrap: anywhere; max-width: 180px; }
+#debug-panel button { min-height: 44px; }
+#three-layer canvas { position: absolute; inset: 0; display: block; }
+#three-layer { pointer-events: none; }
+.stage[data-weather="rain"] .stage-shade { background: #294d6825; }
+.stage[data-weather="sunny"] .stage-shade { background: #ffdc6b12; }
 * { box-sizing: border-box; } body { margin: 0; min-width: 320px; overscroll-behavior: none; } button, input { font: inherit; } button { border: 0; cursor: pointer; -webkit-tap-highlight-color: transparent; }
 #app { width: 100vw; height: 100svh; min-height: 420px; display: flex; flex-direction: column; overflow: hidden; background: #153b45; }
 .stage { position: relative; flex: 1; min-height: 0; overflow: hidden; background: linear-gradient(155deg, #8bd7cb 0%, #d8f0c2 48%, #f8c980 100%); }

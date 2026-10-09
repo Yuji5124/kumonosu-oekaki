@@ -1,0 +1,41 @@
+const { chromium } = require('playwright');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+(async () => {
+  const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || (fs.existsSync('/usr/bin/chromium') ? '/usr/bin/chromium' : undefined), args: ['--no-sandbox', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+  const page = await browser.newPage({ viewport: { width: 1180, height: 820 }, deviceScaleFactor: 2 });
+  const errors = []; page.on('pageerror', e => errors.push(e.message));
+  await page.goto('http://127.0.0.1:5180/kumonosu-oekaki/?debug=1');
+  const culling = await page.evaluate(async () => {
+    const T = await import('/kumonosu-oekaki/node_modules/.vite/deps/three.js');
+    const r = new T.WebGLRenderer({ alpha: true, preserveDrawingBuffer: true }); r.setSize(64, 64);
+    const scene = new T.Scene(); const sprite = new T.Sprite(new T.SpriteMaterial({ color: 0xff0000 })); sprite.position.set(32, 32, 1); sprite.scale.set(20,20,1); scene.add(sprite);
+    const camera = new T.OrthographicCamera(0,64,0,64,0,100); camera.position.z=10;
+    const pixels = new Uint8Array(64*64*4); const gl = r.getContext();
+    const count = () => { r.render(scene,camera); gl.readPixels(0,0,64,64,gl.RGBA,gl.UNSIGNED_BYTE,pixels); return pixels.filter((_,i)=>i%4===3 && pixels[i]>0).length; };
+    const before=count(); camera.top=64; camera.bottom=0; camera.updateProjectionMatrix(); const after=count(); sprite.material.dispose(); r.dispose(); return {before,after};
+  });
+  console.log('Projection pixel regression:', culling); assert.equal(culling.before,0); assert(culling.after>100);
+  const route = await page.evaluate(async () => { const { routePoints } = await import('/kumonosu-oekaki/src/simulation/routes.ts'); const make = (id, points) => ({id,points,width:4,color:'#fff',createdAt:0}); return routePoints(make('a',[{x:0,y:10},{x:20,y:10}]),[make('a',[{x:0,y:10},{x:20,y:10}]),make('b',[{x:10,y:0},{x:10,y:20}])]); });
+  assert.deepEqual(route,[{x:0,y:10},{x:10,y:10},{x:20,y:10}]);
+  await page.mouse.move(350,350); await page.mouse.down(); await page.mouse.move(550,350,{steps:20}); await page.mouse.up();
+  await page.waitForTimeout(650);
+  assert.match(await page.locator('[data-debug-value="critters"]').textContent(),/spider/);
+  const before=await page.locator('[data-debug-value="positions"]').textContent(); await page.waitForTimeout(1800);
+  assert.notEqual(await page.locator('[data-debug-value="positions"]').textContent(),before);
+  assert.match(await page.locator('[data-debug-value="critters"]').textContent(),/butterfly/);
+  assert.match(await page.locator('[data-debug-value="critters"]').textContent(),/ladybug/);
+  await page.locator('#done').click(); await page.waitForTimeout(300); await page.reload(); await page.locator('#book').click(); await page.locator('[data-load-artwork]').first().click();
+  await page.waitForTimeout(500); assert.equal(await page.locator('[data-debug-value="strokes"]').textContent(),'1');
+  await page.locator('#undo').click(); await page.waitForTimeout(200); assert.equal(await page.locator('[data-debug-value="strokes"]').textContent(),'0');
+  await page.locator('#redo').click(); await page.waitForTimeout(200); assert.equal(await page.locator('[data-debug-value="strokes"]').textContent(),'1');
+  for (const kind of ['spider','butterfly','ladybug','raindrop','leaf']) { await page.locator(`[data-force="${kind}"]`).click(); await page.waitForTimeout(400); assert.match(await page.locator('[data-debug-value="critters"]').textContent(),new RegExp(kind)); }
+  await page.locator('[data-debug-action="save"]').click(); await page.waitForTimeout(400); assert.equal(await page.locator('[data-debug-value="save"]').textContent(),'テスト成功');
+  assert.match(await page.locator('[data-debug-value="camera"]').textContent(),/拒否|非対応/);
+  await page.screenshot({path:'/tmp/kumonosu-webgl.png'});
+  await page.evaluate(() => document.querySelector('#three-layer canvas:last-child').dispatchEvent(new Event('webglcontextlost', {cancelable:true})));
+  await page.waitForTimeout(500); assert.equal(await page.locator('[data-debug-value="webgl"]').textContent(),'Canvas 2D');
+  await page.screenshot({path:'/tmp/kumonosu-phase16.png'}); assert.deepEqual(errors,[]);
+  console.log('PASS: sprite pixels, animation, delayed creatures, save/reload/restore, undo/redo, forced effects, storage test, denied camera');
+  await browser.close();
+})().catch(e=>{console.error(e);process.exitCode=1});
