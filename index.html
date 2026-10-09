@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+    <meta name="theme-color" content="#153b45" />
+    <title>くものす おえかき</title>
+  </head>
+  <body>
+    <main id="app" aria-label="くものす おえかき">
+      <section class="stage" aria-label="おえかきステージ">
+        <video id="camera" autoplay playsinline muted></video>
+        <div class="fallback-scene" aria-hidden="true"><span>🌿</span><span>☁️</span><span>🌱</span></div>
+        <canvas id="drawing" aria-label="クモの巣を描く場所"></canvas>
+        <div id="three-layer" aria-hidden="true"></div>
+        <div class="stage-shade"></div>
+        <header class="topbar">
+          <div class="brand"><span class="brand-spider">🕷️</span><span>くものす<br /><b>おえかき</b></span></div>
+          <div class="top-actions"><button id="weather-button" class="pill-button" type="button">☀️ はれ</button><button id="camera-button" class="icon-button" type="button" aria-label="カメラを起動">📷</button></div>
+        </header>
+        <div id="hint" class="hint">指で線をかいてみよう</div>
+        <div id="status" class="status" aria-live="polite">カメラを準備しています…</div>
+      </section>
+      <nav class="toolbar" aria-label="おえかき道具">
+        <div class="tool-group colors" aria-label="いとの色"><button class="color-dot selected" data-color="#fffaf0" style="--dot:#fffaf0" aria-label="しろ"></button><button class="color-dot" data-color="#ffd166" style="--dot:#ffd166" aria-label="きいろ"></button><button class="color-dot" data-color="#ff8fab" style="--dot:#ff8fab" aria-label="ももいろ"></button><button class="color-dot" data-color="#8ee3c8" style="--dot:#8ee3c8" aria-label="みどり"></button></div>
+        <label class="size-control">太さ <input id="size" type="range" min="2" max="10" value="4" /></label>
+        <div class="tool-group"><button id="undo" class="tool-button" type="button">↶<small>もどす</small></button><button id="redo" class="tool-button" type="button">↷<small>やりなおす</small></button><button id="eraser" class="tool-button" type="button">🧽<small>けす</small></button><button id="clear" class="tool-button" type="button">🧹<small>ぜんぶけす</small></button><button id="book" class="tool-button" type="button">📖<small>ずかん</small></button><button id="done" class="done-button" type="button">できた！</button></div>
+      </nav>
+      <div id="toast" class="toast" role="status"></div>
+      <dialog id="weather-dialog"><h2>おてんき</h2><div class="weather-options"><button data-weather="sunny">☀️<b>はれ</b><small>ちょうちょがくるよ</small></button><button data-weather="rain">🌧️<b>あめ</b><small>しずくがぽつぽつ</small></button><button data-weather="wind">🍃<b>かぜ</b><small>はっぱがひらひら</small></button></div><button class="close-dialog" type="button">とじる</button></dialog>
+      <dialog id="book-dialog"><h2>きょうのずかん</h2><div id="book-list" class="book-list"></div><button class="close-dialog" type="button">とじる</button></dialog>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
