@@ -26,6 +26,12 @@ export function hasIntersection(a: Stroke, b: Stroke): boolean {
   return false;
 }
 
+export function countIntersections(strokes: Stroke[]): number {
+  let count = 0;
+  for (let i = 0; i < strokes.length; i++) for (let j = i + 1; j < strokes.length; j++) if (hasIntersection(strokes[i], strokes[j])) count++;
+  return count;
+}
+
 export function findNearestStroke(point: Point, strokes: Stroke[]): Stroke | undefined {
   let nearest: Stroke | undefined; let distance = Infinity;
   for (const stroke of strokes) for (let i = 1; i < stroke.points.length; i++) {

@@ -29,6 +29,7 @@
       <div id="toast" class="toast" role="status"></div>
       <dialog id="weather-dialog"><h2>おてんき</h2><div class="weather-options"><button data-weather="sunny">☀️<b>はれ</b><small>ちょうちょがくるよ</small></button><button data-weather="rain">🌧️<b>あめ</b><small>しずくがぽつぽつ</small></button><button data-weather="wind">🍃<b>かぜ</b><small>はっぱがひらひら</small></button></div><button class="close-dialog" type="button">とじる</button></dialog>
       <dialog id="book-dialog"><h2>きょうのずかん</h2><div id="book-list" class="book-list"></div><button class="close-dialog" type="button">とじる</button></dialog>
+      <aside id="debug-panel" hidden aria-label="デバッグパネル"><h2>DEBUG</h2><dl><dt>FPS</dt><dd data-debug-value="fps">-</dd><dt>線 / 点</dt><dd><span data-debug-value="strokes">-</span> / <span data-debug-value="points">-</span></dd><dt>交差点</dt><dd data-debug-value="intersections">-</dd><dt>生き物</dt><dd data-debug-value="critters">-</dd><dt>天候</dt><dd data-debug-value="weather">-</dd><dt>保存</dt><dd data-debug-value="save">-</dd><dt>カメラ</dt><dd data-debug-value="camera">-</dd></dl><div class="debug-actions"><button data-debug-action="spider" type="button">クモ</button><button data-debug-action="rain" type="button">雨</button><button data-debug-action="wind" type="button">風</button><button data-debug-action="save" type="button">保存テスト</button></div></aside>
     </main>
     <script type="module" src="/src/main.ts"></script>
   </body>

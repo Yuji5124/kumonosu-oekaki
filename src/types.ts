@@ -20,4 +20,14 @@ export type Artwork = {
   discoveries: Discovery[];
 };
 
-export type Critter = { kind: Discovery; x: number; y: number; targetX: number; targetY: number; phase: number; life: number };
+export type Critter = {
+  kind: Discovery;
+  x: number;
+  y: number;
+  targetX: number;
+  targetY: number;
+  phase: number;
+  life: number;
+  path?: Point[];
+  pathIndex?: number;
+};
