@@ -31,4 +31,6 @@ export type Critter = {
   life: number;
   path?: Point[];
   pathIndex?: number;
+  behavior?: 'wander' | 'follow-web' | 'visit-cell' | 'perch';
+  encounterId?: string;
 };

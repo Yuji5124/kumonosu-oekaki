@@ -5,6 +5,7 @@ import { deleteArtwork, listArtworks, saveArtwork } from './storage';
 import './styles.css';
 import { routePoints } from './simulation/routes';
 import { buildWebStructure } from './simulation/webGraph';
+import { findEncounter } from './simulation/encounters';
 
 const stage = document.querySelector('.stage') as HTMLElement;
 const video = document.querySelector('#camera') as HTMLVideoElement;
@@ -40,6 +41,9 @@ let lastError = '', webglState = '初期化中';
 let testStroke: Stroke | null = null;
 let routes: Point[][] = [];
 let lastDebugTime = 0;
+const seenEncounters = new Set<string>();
+let webCache: ReturnType<typeof buildWebStructure> | null = null;
+function webStructure(): ReturnType<typeof buildWebStructure> { return webCache ??= buildWebStructure(strokes); }
 window.addEventListener('error', (event) => { lastError = event.message; });
 window.addEventListener('unhandledrejection', (event) => { lastError = String(event.reason); });
 
@@ -101,7 +105,7 @@ function resize(): void {
   const rect = stage.getBoundingClientRect();
   if (lastStageSize.width && lastStageSize.height && rect.width && rect.height) {
     const scaleX = rect.width / lastStageSize.width; const scaleY = rect.height / lastStageSize.height;
-    strokes = strokes.map((stroke) => ({ ...stroke, points: stroke.points.map((point) => ({ x: point.x * scaleX, y: point.y * scaleY })) }));
+  strokes = strokes.map((stroke) => ({ ...stroke, points: stroke.points.map((point) => ({ x: point.x * scaleX, y: point.y * scaleY })) })); webCache = null;
     if (active) active.points = active.points.map((point) => ({ x: point.x * scaleX, y: point.y * scaleY }));
     redoStack.forEach((stroke) => stroke.points = stroke.points.map((p) => ({ x: p.x * scaleX, y: p.y * scaleY })));
     critters.forEach((c) => { c.x *= scaleX; c.y *= scaleY; c.targetX *= scaleX; c.targetY *= scaleY; c.path = c.path?.map((p) => ({ x: p.x * scaleX, y: p.y * scaleY })); });
@@ -131,7 +135,7 @@ function drawStrokes(): void {
     ctx.strokeStyle = stroke.color; ctx.lineWidth = stroke.width; ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0;
     ctx.beginPath(); stroke.points.forEach((point, index) => index ? ctx.lineTo(point.x, point.y) : ctx.moveTo(point.x, point.y)); ctx.stroke(); ctx.restore();
   }
-  const structure = buildWebStructure(strokes);
+  const structure = webStructure();
   ctx.fillStyle = '#fff2bd'; ctx.strokeStyle = '#28434d'; ctx.lineWidth = 1.5;
   for (const point of structure.junctions) { ctx.beginPath(); ctx.arc(point.x, point.y, 3.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); }
   ctx.restore();
@@ -143,9 +147,10 @@ function updateStatus(): void { status.textContent = strokes.length ? `${strokes
 function finishStroke(): void {
   if (!active) return;
   if (active.points.length > 1) {
-    strokes.push(active); redoStack = []; const discoveries = getDiscoveries(strokes); spawnSpiderReaction();
+    strokes.push(active); webCache = null; redoStack = []; const discoveries = getDiscoveries(strokes); spawnSpiderReaction();
     window.setTimeout(() => { if (strokes.length) spawnReaction('butterfly'); }, 900);
     window.setTimeout(() => { if (strokes.length) spawnReaction('ladybug'); }, 1500);
+    seenEncounters.clear();
     showToast(discoveries.length > 1 ? 'すごい！いとがつながったよ ✨' : 'クモが線を見つけたよ 🕷️');
   }
   active = null; drawStrokes(); updateStatus();
@@ -161,10 +166,10 @@ drawing.addEventListener('pointerup', finishStroke); drawing.addEventListener('p
 
 document.querySelectorAll<HTMLButtonElement>('.color-dot').forEach((button) => button.addEventListener('click', () => { color = button.dataset.color!; document.querySelector('.color-dot.selected')?.classList.remove('selected'); button.classList.add('selected'); }));
 (document.querySelector('#size') as HTMLInputElement).addEventListener('input', (event) => { width = Number((event.target as HTMLInputElement).value); });
-document.querySelector('#undo')!.addEventListener('click', () => { const stroke = strokes.pop(); if (stroke) { redoStack.push(stroke); removeAllCritters(); drawStrokes(); updateStatus(); showToast('ひとつもどしたよ'); } });
-document.querySelector('#redo')!.addEventListener('click', () => { const stroke = redoStack.pop(); if (stroke) { strokes.push(stroke); drawStrokes(); updateStatus(); showToast('やりなおしたよ'); } });
+document.querySelector('#undo')!.addEventListener('click', () => { const stroke = strokes.pop(); if (stroke) { webCache = null; redoStack.push(stroke); removeAllCritters(); drawStrokes(); updateStatus(); showToast('ひとつもどしたよ'); } });
+document.querySelector('#redo')!.addEventListener('click', () => { const stroke = redoStack.pop(); if (stroke) { webCache = null; strokes.push(stroke); drawStrokes(); updateStatus(); showToast('やりなおしたよ'); } });
 document.querySelector('#eraser')!.addEventListener('click', (event) => { eraserMode = !eraserMode; (event.currentTarget as HTMLButtonElement).classList.toggle('active', eraserMode); showToast(eraserMode ? 'けしたい糸をタッチしてね' : 'おえかきにもどったよ'); });
-document.querySelector('#clear')!.addEventListener('click', () => { if (!strokes.length) return; redoStack = [...strokes, ...redoStack]; strokes = []; removeAllCritters(); drawStrokes(); updateStatus(); showToast('まっさらになったよ'); });
+document.querySelector('#clear')!.addEventListener('click', () => { if (!strokes.length) return; redoStack = [...strokes, ...redoStack]; strokes = []; webCache = null; removeAllCritters(); drawStrokes(); updateStatus(); showToast('まっさらになったよ'); });
 document.querySelector('#weather-button')!.addEventListener('click', () => (document.querySelector('#weather-dialog') as HTMLDialogElement).showModal());
 document.querySelectorAll<HTMLButtonElement>('[data-weather]').forEach((button) => button.addEventListener('click', () => { setWeather(button.dataset.weather as Weather); (document.querySelector('#weather-dialog') as HTMLDialogElement).close(); }));
 document.querySelectorAll('.close-dialog').forEach((button) => button.addEventListener('click', () => (button.closest('dialog') as HTMLDialogElement).close()));
@@ -211,8 +216,11 @@ function addCritter(kind: Discovery, start: Point, path?: Point[]): Critter {
 
 function spawnReaction(kind: Discovery): void {
   if (critters.some((critter) => critter.kind === kind) || critters.length >= 10) return;
-  const rect = stage.getBoundingClientRect(); const source = strokes[strokes.length - 1];
-  const critter = addCritter(kind, kind === 'ladybug' && source ? source.points[Math.floor(source.points.length / 2)] : { x: rect.width * .45, y: rect.height * .45 });
+  const rect = stage.getBoundingClientRect(); const source = strokes[strokes.length - 1]; const web = webStructure();
+  const cell = kind === 'butterfly' ? web.cells.reduce((best, current) => !best || current.area > best.area ? current : best, undefined as typeof web.cells[number] | undefined) : undefined;
+  const path = cell ? [...cell.points] : kind === 'ladybug' && source ? [...source.points] : undefined;
+  const critter = addCritter(kind, path?.[0] ?? { x: rect.width * .45, y: rect.height * .45 }, path);
+  critter.behavior = cell ? 'visit-cell' : kind === 'ladybug' && path ? 'follow-web' : 'wander';
   critter.targetX = Math.random() * Math.max(1, rect.width - 120) + 60; critter.targetY = Math.random() * (rect.height * .6) + rect.height * .2;
 }
 function spawnSpiderReaction(): void { const stroke = strokes[strokes.length - 1]; if (!stroke || stroke.points.length < 2) return; routes = strokes.map((s) => routePoints(s, strokes)); critters.filter((critter) => critter.kind === 'spider').forEach(removeCritter); addCritter('spider', stroke.points[0], [...routes[routes.length - 1]]); }
@@ -231,10 +239,10 @@ function advanceCritter(critter: Critter, dt: number, index: number, rect: DOMRe
   critter.life += dt;
   if (critter.kind === 'raindrop') { critter.y += 120 * dt; if (critter.y > rect.height + 30) { removeCritter(critter); return; } }
   else if (critter.kind === 'leaf') { critter.x -= 90 * dt; critter.y += Math.sin(critter.life * 3) * 20 * dt; if (critter.x < -30) { removeCritter(critter); return; } }
-  else if (critter.kind === 'ladybug') { /* rests on the thread */ }
+  else if (critter.kind === 'ladybug' && critter.behavior !== 'follow-web') { /* rests on the thread */ }
   else if (critter.path && critter.pathIndex !== undefined) {
-    const target = critter.path[critter.pathIndex]; if (!target) { critter.path.reverse(); critter.pathIndex = 1; return; }
-    const distance = Math.hypot(target.x - critter.x, target.y - critter.y); const speed = critter.kind === 'spider' ? 75 : 95;
+    const target = critter.path[critter.pathIndex]; if (!target) { if (critter.behavior === 'visit-cell') critter.pathIndex = 0; else { critter.path.reverse(); critter.pathIndex = 1; } return; }
+    const distance = Math.hypot(target.x - critter.x, target.y - critter.y); const speed = critter.kind === 'spider' ? 75 : critter.kind === 'ladybug' ? 28 : 48;
     if (distance <= speed * dt) {
       critter.x = target.x; critter.y = target.y; critter.pathIndex += 1;
       if (critter.kind === 'spider' && !testStroke && Math.random() < .35) {
@@ -253,7 +261,7 @@ function advanceCritter(critter: Critter, dt: number, index: number, rect: DOMRe
 }
 
 async function saveCurrentArtwork(): Promise<void> {
-  const artwork: Artwork = { id: currentArtworkId ?? crypto.randomUUID(), createdAt: Date.now(), strokes: strokes.map((stroke) => ({ ...stroke, points: stroke.points.map((point) => ({ ...point })) })), weather, discoveries: [...new Set([...getDiscoveries(strokes), ...(weather === 'rain' ? ['raindrop' as Discovery] : []), ...(weather === 'wind' ? ['leaf' as Discovery] : [])])], webStructure: buildWebStructure(strokes) };
+  const artwork: Artwork = { id: currentArtworkId ?? crypto.randomUUID(), createdAt: Date.now(), strokes: strokes.map((stroke) => ({ ...stroke, points: stroke.points.map((point) => ({ ...point })) })), weather, discoveries: [...new Set([...getDiscoveries(strokes), ...(weather === 'rain' ? ['raindrop' as Discovery] : []), ...(weather === 'wind' ? ['leaf' as Discovery] : [])])], webStructure: webStructure() };
   try { await saveArtwork(artwork); currentArtworkId = artwork.id; debugValue('save', '成功'); showToast('作品をしまったよ 💛'); if (weather === 'rain') spawnWeatherCritter('raindrop'); if (weather === 'wind') spawnWeatherCritter('leaf'); }
   catch { debugValue('save', '失敗'); showToast('保存できなかったよ。もう一度ためしてね'); }
 }
@@ -265,7 +273,7 @@ async function openBook(): Promise<void> {
 }
 
 async function loadArtwork(id: string): Promise<void> {
-  const artwork = (await listArtworks()).find((item) => item.id === id); if (!artwork) return; strokes = artwork.strokes.map((stroke) => ({ ...stroke, points: stroke.points.map((point) => ({ ...point })) })); redoStack = []; currentArtworkId = artwork.id; setWeather(artwork.weather); removeAllCritters(); if (strokes.length) spawnSpiderReaction(); drawStrokes(); updateStatus(); (document.querySelector('#book-dialog') as HTMLDialogElement).close(); showToast('作品をひらいたよ');
+  const artwork = (await listArtworks()).find((item) => item.id === id); if (!artwork) return; strokes = artwork.strokes.map((stroke) => ({ ...stroke, points: stroke.points.map((point) => ({ ...point })) })); webCache = null; redoStack = []; currentArtworkId = artwork.id; setWeather(artwork.weather); removeAllCritters(); if (strokes.length) spawnSpiderReaction(); drawStrokes(); updateStatus(); (document.querySelector('#book-dialog') as HTMLDialogElement).close(); showToast('作品をひらいたよ');
 }
 
 async function runSaveTest(): Promise<void> {
@@ -315,6 +323,12 @@ function animate(now: number): void {
   updateCount++;
   if (weather === 'rain' && Math.random() < dt * 5) spawnWeatherCritter('raindrop'); if (weather === 'wind' && Math.random() < dt * 1.2) spawnWeatherCritter('leaf');
   [...critters].forEach((critter, index) => { advanceCritter(critter, dt, index, rect); if ((critter.kind === 'leaf' && critter.x < -60) || (critter.kind === 'raindrop' && critter.y > rect.height + 60)) removeCritter(critter); });
+  const encounter = findEncounter(critters, webStructure(), seenEncounters);
+  if (encounter) {
+    seenEncounters.add(encounter.id);
+    if (encounter.id === 'web-cell-discovery') { showToast('まんなかに小さなおへやができたよ！'); if (!critters.some(c => c.kind === 'butterfly')) spawnReaction('butterfly'); }
+    else { showToast('クモとちょうちょがこんにちは！'); const butterfly = critters.find(c => c.kind === 'butterfly'); const cell = webStructure().cells[0]; if (butterfly && cell) { butterfly.path = [...cell.points]; butterfly.pathIndex = 1; butterfly.behavior = 'visit-cell'; } }
+  }
   while (critters.length > 10) removeCritter(critters[0]); if (weather === 'wind') drawStrokes(); renderEffects();
   } catch (error) { lastError = String(error); webglState = 'Canvas 2D'; }
   if (isDebug) { fpsFrames++; if (now - lastDebugTime > 250) { updateDebug(now); lastDebugTime = now; } }
