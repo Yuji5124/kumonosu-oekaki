@@ -26,10 +26,10 @@ const fs = require('node:fs');
   assert.match(await page.locator('[data-debug-value="critters"]').textContent(),/butterfly/);
   assert.match(await page.locator('[data-debug-value="critters"]').textContent(),/ladybug/);
   await page.locator('#done').click(); await page.waitForTimeout(300); await page.reload(); await page.locator('#book').click(); await page.locator('[data-load-artwork]').first().click();
-  await page.waitForTimeout(500); assert.equal(await page.locator('[data-debug-value="strokes"]').textContent(),'1');
-  await page.locator('#undo').click(); await page.waitForTimeout(200); assert.equal(await page.locator('[data-debug-value="strokes"]').textContent(),'0');
-  await page.locator('#redo').click(); await page.waitForTimeout(200); assert.equal(await page.locator('[data-debug-value="strokes"]').textContent(),'1');
-  for (const kind of ['spider','butterfly','ladybug','raindrop','leaf']) { await page.locator(`[data-force="${kind}"]`).click(); await page.waitForTimeout(400); assert.match(await page.locator('[data-debug-value="critters"]').textContent(),new RegExp(kind)); }
+  await page.waitForFunction(() => document.querySelector('[data-debug-value="strokes"]').textContent === '1', { timeout: 5000 });
+  await page.locator('#undo').click(); await page.waitForFunction(() => document.querySelector('[data-debug-value="strokes"]').textContent === '0');
+  await page.locator('#redo').click(); await page.waitForFunction(() => document.querySelector('[data-debug-value="strokes"]').textContent === '1');
+  for (const kind of ['spider','butterfly','ladybug','raindrop','leaf']) { await page.locator(`[data-force="${kind}"]`).click(); await page.waitForFunction(k => document.querySelector('[data-debug-value="critters"]').textContent.includes(k), kind); }
   await page.locator('[data-debug-action="save"]').click(); await page.waitForTimeout(400); assert.equal(await page.locator('[data-debug-value="save"]').textContent(),'テスト成功');
   assert.match(await page.locator('[data-debug-value="camera"]').textContent(),/拒否|非対応/);
   await page.screenshot({path:'/tmp/kumonosu-webgl.png'});

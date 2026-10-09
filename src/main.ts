@@ -29,6 +29,8 @@ let currentArtworkId: string | null = null;
 let lastStageSize = { width: 0, height: 0 };
 let windTime = 0;
 let lastTime = performance.now();
+let rafHandle = 0;
+let lastRenderTime = 0;
 let fpsFrames = 0;
 let fpsWindowStart = performance.now();
 let fps = 0;
@@ -49,7 +51,8 @@ const fallback = document.createElement('canvas');
 threeLayer.append(fallback);
 try {
   renderer = new THREE.WebGLRenderer({ alpha: true, antialias: false, powerPreference: 'low-power' });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+  // A12-class devices benefit more from a stable fill rate than a dense canvas.
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.25));
   renderer.setClearColor(0, 0); threeLayer.append(renderer.domElement); webglState = 'WebGL準備済み';
   renderer.debug.onShaderError = () => { lastError = 'シェーダーコンパイル失敗'; webglState = 'Canvas 2D'; };
   renderer.domElement.addEventListener('webglcontextlost', (event) => { event.preventDefault(); webglState = 'Canvas 2D'; });
@@ -103,7 +106,8 @@ function resize(): void {
     critters.forEach((c) => { c.x *= scaleX; c.y *= scaleY; c.targetX *= scaleX; c.targetY *= scaleY; c.path = c.path?.map((p) => ({ x: p.x * scaleX, y: p.y * scaleY })); });
   }
   lastStageSize = { width: rect.width, height: rect.height };
-  drawing.width = Math.max(1, Math.floor(rect.width * devicePixelRatio)); drawing.height = Math.max(1, Math.floor(rect.height * devicePixelRatio));
+  const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+  drawing.width = Math.max(1, Math.floor(rect.width * dpr)); drawing.height = Math.max(1, Math.floor(rect.height * dpr));
   drawing.style.width = `${rect.width}px`; drawing.style.height = `${rect.height}px`;
   fallback.width = rect.width; fallback.height = rect.height;
   renderer?.setSize(rect.width, rect.height, false); camera.left = 0; camera.right = rect.width; camera.top = rect.height; camera.bottom = 0; camera.updateProjectionMatrix(); drawStrokes();
@@ -298,8 +302,10 @@ function renderEffects(): void {
 }
 
 function animate(now: number): void {
-  requestAnimationFrame(animate); rafCount++;
-  if (document.hidden || now - lastTime < 1000 / 30) return;
+  if (document.hidden) { rafHandle = 0; return; }
+  rafHandle = requestAnimationFrame(animate); rafCount++;
+  if (now - lastRenderTime < 1000 / 30) return;
+  lastRenderTime = now;
   try {
   const dt = Math.min((now - lastTime) / 1000, .05); lastTime = now; windTime += dt; const rect = stage.getBoundingClientRect();
   updateCount++;
@@ -311,5 +317,9 @@ function animate(now: number): void {
 }
 
 document.addEventListener('visibilitychange', () => { lastTime = performance.now(); });
+function resumeAnimation(): void { lastTime = performance.now(); lastRenderTime = lastTime; if (!document.hidden && !rafHandle) rafHandle = requestAnimationFrame(animate); }
+document.addEventListener('visibilitychange', resumeAnimation);
+window.addEventListener('pageshow', resumeAnimation);
+window.addEventListener('pagehide', () => { if (rafHandle) cancelAnimationFrame(rafHandle); rafHandle = 0; cameraStream?.getTracks().forEach((track) => track.stop()); cameraStream = null; });
 
 setupDebug(); window.addEventListener('resize', resize); resize(); void startCamera(); updateStatus(); requestAnimationFrame(animate);
