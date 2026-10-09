@@ -11,6 +11,8 @@ const stage = document.querySelector('.stage') as HTMLElement;
 const video = document.querySelector('#camera') as HTMLVideoElement;
 const drawing = document.querySelector('#drawing') as HTMLCanvasElement;
 const ctx = drawing.getContext('2d')!;
+const feedback = document.querySelector('#feedback') as HTMLCanvasElement;
+const feedbackCtx = feedback.getContext('2d')!;
 const threeLayer = document.querySelector('#three-layer') as HTMLElement;
 const status = document.querySelector('#status') as HTMLElement;
 const hint = document.querySelector('#hint') as HTMLElement;
@@ -41,6 +43,9 @@ let lastError = '', webglState = '初期化中';
 let testStroke: Stroke | null = null;
 let routes: Point[][] = [];
 let lastDebugTime = 0;
+let audioContext: AudioContext | null = null;
+let soundEnabled = false;
+const sparkles: Array<{ x: number; y: number; born: number; color: string }> = [];
 const seenEncounters = new Set<string>();
 let webCache: ReturnType<typeof buildWebStructure> | null = null;
 function webStructure(): ReturnType<typeof buildWebStructure> { return webCache ??= buildWebStructure(strokes); }
@@ -75,7 +80,7 @@ function setupDebug(): void {
   if (!debugPanel) return;
   debugPanel.hidden = !isDebug;
   if (!isDebug) return;
-  const details = document.createElement('details'); details.open = true;
+  const details = document.createElement('details'); details.open = false;
   const summary = document.createElement('summary'); summary.textContent = '診断を開く／閉じる · Phase 1.6';
   const content = document.createElement('div');
   while (debugPanel.firstChild) content.append(debugPanel.firstChild);
@@ -115,6 +120,7 @@ function resize(): void {
   drawing.width = Math.max(1, Math.floor(rect.width * dpr)); drawing.height = Math.max(1, Math.floor(rect.height * dpr));
   drawing.style.width = `${rect.width}px`; drawing.style.height = `${rect.height}px`;
   fallback.width = rect.width; fallback.height = rect.height;
+  feedback.width = Math.max(1, Math.floor(rect.width * dpr)); feedback.height = Math.max(1, Math.floor(rect.height * dpr));
   renderer?.setSize(rect.width, rect.height, false); camera.left = 0; camera.right = rect.width; camera.top = rect.height; camera.bottom = 0; camera.updateProjectionMatrix(); drawStrokes();
 }
 
@@ -150,6 +156,7 @@ function finishStroke(): void {
     strokes.push(active); webCache = null; redoStack = []; const discoveries = getDiscoveries(strokes); spawnSpiderReaction();
     window.setTimeout(() => { if (strokes.length) spawnReaction('butterfly'); }, 900);
     window.setTimeout(() => { if (strokes.length) spawnReaction('ladybug'); }, 1500);
+    addSparkle(active.points[active.points.length - 1]); playTone(520, .09);
     seenEncounters.clear();
     showToast(discoveries.length > 1 ? 'すごい！いとがつながったよ ✨' : 'クモが線を見つけたよ 🕷️');
   }
@@ -175,6 +182,43 @@ document.querySelectorAll<HTMLButtonElement>('[data-weather]').forEach((button) 
 document.querySelectorAll('.close-dialog').forEach((button) => button.addEventListener('click', () => (button.closest('dialog') as HTMLDialogElement).close()));
 document.querySelector('#book')!.addEventListener('click', () => void openBook()); document.querySelector('#done')!.addEventListener('click', () => void saveCurrentArtwork());
 (document.querySelector('#camera-button') as HTMLButtonElement).addEventListener('click', () => void startCamera());
+(document.querySelector('#sound-button') as HTMLButtonElement).addEventListener('click', () => void toggleSound());
+
+async function toggleSound(): Promise<void> {
+  const button = document.querySelector('#sound-button') as HTMLButtonElement;
+  soundEnabled = !soundEnabled;
+  if (soundEnabled) {
+    const AudioContextClass = window.AudioContext ?? (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AudioContextClass) { soundEnabled = false; showToast('このブラウザでは音を使えないよ'); return; }
+    audioContext ??= new AudioContextClass();
+    try { await audioContext.resume(); } catch { soundEnabled = false; }
+  }
+  button.textContent = soundEnabled ? '🔊' : '🔇'; button.setAttribute('aria-pressed', String(soundEnabled));
+  button.setAttribute('aria-label', soundEnabled ? '音をオフにする' : '音をオンにする');
+  if (soundEnabled) { playTone(660, .11); showToast('音をオンにしたよ'); }
+}
+
+function playTone(frequency: number, duration = .14): void {
+  if (!soundEnabled || !audioContext || audioContext.state !== 'running') return;
+  try {
+    const oscillator = audioContext.createOscillator(); const gain = audioContext.createGain();
+    oscillator.type = 'sine'; oscillator.frequency.value = frequency; gain.gain.setValueAtTime(.0001, audioContext.currentTime);
+    gain.gain.exponentialRampToValueAtTime(.055, audioContext.currentTime + .02); gain.gain.exponentialRampToValueAtTime(.0001, audioContext.currentTime + duration);
+    oscillator.connect(gain); gain.connect(audioContext.destination); oscillator.start(); oscillator.stop(audioContext.currentTime + duration);
+  } catch { /* Sound is optional; visuals continue. */ }
+}
+
+function addSparkle(point: Point, color = '#fff2bd'): void { sparkles.push({ x: point.x, y: point.y, born: performance.now(), color }); if (sparkles.length > 24) sparkles.shift(); }
+function renderFeedback(now: number): void {
+  const ratio = feedback.width / Math.max(1, feedback.clientWidth); feedbackCtx.setTransform(ratio, 0, 0, ratio, 0, 0); feedbackCtx.clearRect(0, 0, feedback.clientWidth, feedback.clientHeight);
+  for (let i = sparkles.length - 1; i >= 0; i--) {
+    const item = sparkles[i], age = (now - item.born) / 1000; if (age > .9) { sparkles.splice(i, 1); continue; }
+    const alpha = 1 - age / .9, radius = 5 + age * 18; feedbackCtx.globalAlpha = alpha; feedbackCtx.strokeStyle = item.color; feedbackCtx.lineWidth = 3;
+    feedbackCtx.beginPath(); feedbackCtx.arc(item.x, item.y, radius, 0, Math.PI * 2); feedbackCtx.stroke();
+    feedbackCtx.beginPath(); feedbackCtx.moveTo(item.x - radius, item.y); feedbackCtx.lineTo(item.x + radius, item.y); feedbackCtx.moveTo(item.x, item.y - radius); feedbackCtx.lineTo(item.x, item.y + radius); feedbackCtx.stroke();
+  }
+  feedbackCtx.globalAlpha = 1;
+}
 
 function setWeather(nextWeather: Weather): void {
   weather = nextWeather; document.querySelector('#weather-button')!.textContent = weatherLabel[weather]; removeWeatherCritters(); updateStatus(); drawStrokes();
@@ -326,10 +370,11 @@ function animate(now: number): void {
   const encounter = findEncounter(critters, webStructure(), seenEncounters);
   if (encounter) {
     seenEncounters.add(encounter.id);
+    addSparkle(encounter.at, '#ffd166'); playTone(encounter.id === 'web-cell-discovery' ? 880 : 740, .22);
     if (encounter.id === 'web-cell-discovery') { showToast('まんなかに小さなおへやができたよ！'); if (!critters.some(c => c.kind === 'butterfly')) spawnReaction('butterfly'); }
     else { showToast('クモとちょうちょがこんにちは！'); const butterfly = critters.find(c => c.kind === 'butterfly'); const cell = webStructure().cells[0]; if (butterfly && cell) { butterfly.path = [...cell.points]; butterfly.pathIndex = 1; butterfly.behavior = 'visit-cell'; } }
   }
-  while (critters.length > 10) removeCritter(critters[0]); if (weather === 'wind') drawStrokes(); renderEffects();
+  while (critters.length > 10) removeCritter(critters[0]); if (weather === 'wind') drawStrokes(); renderEffects(); renderFeedback(now);
   } catch (error) { lastError = String(error); webglState = 'Canvas 2D'; }
   if (isDebug) { fpsFrames++; if (now - lastDebugTime > 250) { updateDebug(now); lastDebugTime = now; } }
 }
