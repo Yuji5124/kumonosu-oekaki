@@ -18,6 +18,8 @@ const fs = require('node:fs');
   console.log('Projection pixel regression:', culling); assert.equal(culling.before,0); assert(culling.after>100);
   const route = await page.evaluate(async () => { const { routePoints } = await import('/kumonosu-oekaki/src/simulation/routes.ts'); const make = (id, points) => ({id,points,width:4,color:'#fff',createdAt:0}); return routePoints(make('a',[{x:0,y:10},{x:20,y:10}]),[make('a',[{x:0,y:10},{x:20,y:10}]),make('b',[{x:10,y:0},{x:10,y:20}])]); });
   assert.deepEqual(route,[{x:0,y:10},{x:10,y:10},{x:20,y:10}]);
+  const graph = await page.evaluate(async () => { const { buildWebStructure } = await import('/kumonosu-oekaki/src/simulation/webGraph.ts'); const make=(id,points)=>({id,points,width:4,color:'#fff',createdAt:0}); const result=buildWebStructure([make('top',[{x:10,y:10},{x:30,y:10}]),make('right',[{x:30,y:10},{x:30,y:30}]),make('bottom',[{x:30,y:30},{x:10,y:30}]),make('left',[{x:10,y:30},{x:10,y:10}])]); return {edges:result.edges.length,cells:result.cells.map(c=>c.area)}; });
+  assert.equal(graph.edges,4); assert.deepEqual(graph.cells,[400]);
   await page.mouse.move(350,350); await page.mouse.down(); await page.mouse.move(550,350,{steps:20}); await page.mouse.up();
   await page.waitForTimeout(650);
   assert.match(await page.locator('[data-debug-value="critters"]').textContent(),/spider/);

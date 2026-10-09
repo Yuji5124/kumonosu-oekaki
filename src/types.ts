@@ -18,6 +18,7 @@ export type Artwork = {
   strokes: Stroke[];
   weather: Weather;
   discoveries: Discovery[];
+  webStructure?: import('./simulation/webGraph').WebStructure;
 };
 
 export type Critter = {

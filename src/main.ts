@@ -4,6 +4,7 @@ import { countIntersections, findNearestStroke, getDiscoveries, simplify, weathe
 import { deleteArtwork, listArtworks, saveArtwork } from './storage';
 import './styles.css';
 import { routePoints } from './simulation/routes';
+import { buildWebStructure } from './simulation/webGraph';
 
 const stage = document.querySelector('.stage') as HTMLElement;
 const video = document.querySelector('#camera') as HTMLVideoElement;
@@ -130,6 +131,9 @@ function drawStrokes(): void {
     ctx.strokeStyle = stroke.color; ctx.lineWidth = stroke.width; ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0;
     ctx.beginPath(); stroke.points.forEach((point, index) => index ? ctx.lineTo(point.x, point.y) : ctx.moveTo(point.x, point.y)); ctx.stroke(); ctx.restore();
   }
+  const structure = buildWebStructure(strokes);
+  ctx.fillStyle = '#fff2bd'; ctx.strokeStyle = '#28434d'; ctx.lineWidth = 1.5;
+  for (const point of structure.junctions) { ctx.beginPath(); ctx.arc(point.x, point.y, 3.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); }
   ctx.restore();
 }
 
@@ -249,7 +253,7 @@ function advanceCritter(critter: Critter, dt: number, index: number, rect: DOMRe
 }
 
 async function saveCurrentArtwork(): Promise<void> {
-  const artwork: Artwork = { id: currentArtworkId ?? crypto.randomUUID(), createdAt: Date.now(), strokes: strokes.map((stroke) => ({ ...stroke, points: stroke.points.map((point) => ({ ...point })) })), weather, discoveries: [...new Set([...getDiscoveries(strokes), ...(weather === 'rain' ? ['raindrop' as Discovery] : []), ...(weather === 'wind' ? ['leaf' as Discovery] : [])])] };
+  const artwork: Artwork = { id: currentArtworkId ?? crypto.randomUUID(), createdAt: Date.now(), strokes: strokes.map((stroke) => ({ ...stroke, points: stroke.points.map((point) => ({ ...point })) })), weather, discoveries: [...new Set([...getDiscoveries(strokes), ...(weather === 'rain' ? ['raindrop' as Discovery] : []), ...(weather === 'wind' ? ['leaf' as Discovery] : [])])], webStructure: buildWebStructure(strokes) };
   try { await saveArtwork(artwork); currentArtworkId = artwork.id; debugValue('save', '成功'); showToast('作品をしまったよ 💛'); if (weather === 'rain') spawnWeatherCritter('raindrop'); if (weather === 'wind') spawnWeatherCritter('leaf'); }
   catch { debugValue('save', '失敗'); showToast('保存できなかったよ。もう一度ためしてね'); }
 }
