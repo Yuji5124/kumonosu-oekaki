@@ -165,7 +165,7 @@ function finishStroke(): void {
 
 drawing.addEventListener('pointerdown', (event) => {
   event.preventDefault(); if (event.pointerType === 'mouse' && event.button !== 0) return; const point = pointFromEvent(event);
-  if (eraserMode) { const target = findNearestStroke(point, strokes); if (target) { strokes = strokes.filter((stroke) => stroke.id !== target.id); redoStack.push(target); drawStrokes(); updateStatus(); showToast('いとを1本けしたよ'); } return; }
+  if (eraserMode) { const target = findNearestStroke(point, strokes); if (target) { strokes = strokes.filter((stroke) => stroke.id !== target.id); webCache = null; seenEncounters.clear(); redoStack.push(target); drawStrokes(); updateStatus(); showToast('いとを1本けしたよ'); } return; }
   drawing.setPointerCapture(event.pointerId); active = { id: crypto.randomUUID(), points: [point], color, width, createdAt: Date.now() }; hint.classList.remove('visible'); drawStrokes();
 }, { passive: false });
 drawing.addEventListener('pointermove', (event) => { if (!active) return; event.preventDefault(); active.points = simplify([...active.points, pointFromEvent(event)], 4); drawStrokes(); }, { passive: false });
